@@ -16,31 +16,119 @@ struct Character {
   int damage_point;
   int pos_x;
   int pos_y;
-  bool is_hero = 0;
 };
 
-void InitializeMap(vector<vector<char>>& map, const int& size) {
-  map.resize(size, vector<char>(size, '.'));
-}
+void InitializeMap(vector<vector<char>>& map, const int& size);
+void CreateEnemies(vector<vector<char>>& map, vector<Character>& enemies);
+void CreatePlayer(vector<vector<char>>& map, Character& player);
+void PrintMap(const vector<vector<char>>& map, const int& size);
+void PlaceCharacter(vector<vector<char>>& map, const Character& character, const char symbol);
+void InputFromUser(string& command);
+bool IsActionCommand(const string& command);
+void LoadGame(Character& player, vector<Character>& enemies);
+void SaveGame(const Character& player, const vector<Character>& enemies);
+void AttackCharacter(Character& attacker, Character& defender);
+bool IsCharacterDead(const Character& character);
+bool GameOver(const Character& player, const vector<Character>& enemies);
+void PlayerAction(Character& player, vector<Character>& enemies, vector<vector<char>>& map, const string& command);
+void EnemyAction(Character& enemy, Character& player, vector<vector<char>>& map, const string& command);
+bool IsDead(const Character& character);
 
-void CreateEnemy(vector<vector<char>>& map, Character& enemy,
-                 int& enemy_number) {
-  std::string name = "Enemy #" + std::to_string(enemy_number + 1);
-  if (name.length() >= sizeof(enemy.name)) {
-    std::cerr << "Name is too long!" << std::endl;
-    return;
-  }
-  strncpy(enemy.name, name.c_str(), name.length());
-  enemy.name[name.length()] = '\0';
-  enemy.health_point = rand() % 101 + 50;
-  enemy.armor_point = rand() % 51;
-  enemy.damage_point = rand() % 16 + 15;
+int main() {
+  srand(static_cast<unsigned int>(time(0)));
+
+  const int map_size = 10;
+  vector<vector<char>> map;
+  InitializeMap(map, map_size);
+
+  Character player;
+  CreatePlayer(map, player);
+
+  int enemies_amount = 5;
+  vector<Character> enemies(enemies_amount);
+  CreateEnemies(map, enemies);
+
+  bool is_player_move = true;
 
   while (true) {
-    enemy.pos_x = rand() % map.size();
-    enemy.pos_y = rand() % map.size();
-    if (map[enemy.pos_y][enemy.pos_x] == '.') break;
+    InitializeMap(map, map_size);
+    PlaceCharacter(map, player, 'P');
+    for (const auto& enemy : enemies) {
+      if (!IsDead(enemy)) {
+        PlaceCharacter(map, enemy, 'E');
+      }
+    }
+
+    PrintMap(map, map_size);
+
+    if (is_player_move) {
+        cout << "\nYour turn to action" << endl;
+        string command;
+        InputFromUser(command);
+
+        if (IsActionCommand(command)) {
+            PlayerAction(player, enemies, map, command);
+        } else {
+            if (command == "SAVE") {
+                SaveGame(player, enemies);
+            } else if (command == "LOAD") {
+                LoadGame(player, enemies);
+                continue;
+            }
+        }
+        is_player_move = !is_player_move;
+
+    } else {
+        cout << "\nEnemies turn to action" << endl;
+        for (auto& enemy : enemies) {
+            if (!IsDead(enemy)) {
+                string command(1, "WSAD"[rand() % 4]);
+                EnemyAction(enemy, player, map, command);
+            }
+        }
+        is_player_move = !is_player_move;
+    }
+
+    if (GameOver(player, enemies)) {
+      break;
+    }
+    
+    //map.clear();
   }
+  return 0;
+}
+
+
+
+
+void InitializeMap(vector<vector<char>>& map, const int& size) {
+  map.assign(size, vector<char>(size, '.'));
+}
+
+void CreateEnemies(vector<vector<char>>& map, vector<Character>& enemies) {
+    int i = 1;
+    for (auto& enemy : enemies) {
+        std::string name = "Enemy #" + std::to_string(i);
+        if (name.length() >= sizeof(enemy.name)) {
+            std::cerr << "Name is too long!" << std::endl;
+            return;
+        }
+        strncpy(enemy.name, name.c_str(), name.length());
+        enemy.name[name.length()] = '\0';
+        enemy.health_point = rand() % 101 + 50;
+        enemy.armor_point = rand() % 51;
+        enemy.damage_point = rand() % 16 + 15;
+
+        while (true) {
+            enemy.pos_x = rand() % map.size();
+            enemy.pos_y = rand() % map.size();
+            if (map[enemy.pos_y][enemy.pos_x] == '.') {
+                map[enemy.pos_y][enemy.pos_x] = 'E';
+                break;
+            }
+        }
+        ++i;
+    }
 }
 
 void CreatePlayer(vector<vector<char>>& map, Character& player) {
@@ -56,14 +144,14 @@ void CreatePlayer(vector<vector<char>>& map, Character& player) {
   while (true) {
     player.pos_x = rand() % map.size();
     player.pos_y = rand() % map.size();
-    if (map[player.pos_y][player.pos_x] == '.') break;
+    if (map[player.pos_y][player.pos_x] == '.') {
+        map[player.pos_y][player.pos_x] = 'P';
+        break;
+    }
   }
-
-  player.is_hero = true;
 }
 
 void PrintMap(const vector<vector<char>>& map, const int& size) {
-  cout << endl;
   for (int i = 0; i < size + 1; ++i) {
     cout << "# ";
   }
@@ -83,8 +171,7 @@ void PrintMap(const vector<vector<char>>& map, const int& size) {
   cout << "#\n" << endl;
 }
 
-void PlaceCharacter(vector<vector<char>>& map, const Character& character,
-                    const char symbol) {
+void PlaceCharacter(vector<vector<char>>& map, const Character& character, const char symbol) {
   map[character.pos_y][character.pos_x] = symbol;
 }
 
@@ -96,15 +183,15 @@ void InputFromUser(string& command) {
     cin.ignore(numeric_limits<streamsize>::max(), '\n');
     transform(command.begin(), command.end(), command.begin(),
               [](unsigned char ch) { return toupper(ch); });
-  } while (command != "A" && command != "D" && command != "W" &&
-           command != "S" && command != "SAVE" && command != "LOAD");
+    } while (command != "W" && command != "A" && command != "S" &&
+           command != "D" && command != "SAVE" && command != "LOAD");
 }
 
-bool IsMovingCommand(const string& command) {
-  return command == "A" || command == "D" || command == "W" || command == "S";
+bool IsActionCommand(const string& command) {
+  return command == "W" || command == "A" || command == "S" || command == "D";
 }
 
-void Load(Character& player, vector<Character>& enemies) {
+void LoadGame(Character& player, vector<Character>& enemies) {
   filesystem::path file_path = "./save.bin";
   ifstream in_file(file_path, ios::binary);
 
@@ -128,7 +215,7 @@ void Load(Character& player, vector<Character>& enemies) {
   cout << "The game is loaded successfully" << endl;
 }
 
-void Save(const Character& player, const vector<Character>& enemies) {
+void SaveGame(const Character& player, const vector<Character>& enemies) {
   filesystem::path file_path = "./save.bin";
   ofstream out_file(file_path, ios::binary);
 
@@ -151,51 +238,6 @@ void Save(const Character& player, const vector<Character>& enemies) {
   cout << "The game saved successfully" << endl;
 }
 
-void Attack(Character& attacker, Character& defender) {
-  defender.armor_point -= attacker.damage_point;
-  if (defender.armor_point < 0) {
-    defender.health_point += defender.armor_point;
-    defender.armor_point = 0;
-  }
-
-  cout << attacker.name << " attacks " << defender.name << " for "
-       << attacker.damage_point << " damage!" << endl;
-}
-
-void CharacterAction(vector<vector<char>>& map, Character& character,
-                     Character& player, vector<Character>& enemies,
-                     const string& command) {
-  int map_size = map.size();
-  int new_x = character.pos_x;
-  int new_y = character.pos_y;
-
-  if (command == "W")
-    --new_y;
-  else if (command == "S")
-    ++new_y;
-  else if (command == "A")
-    --new_x;
-  else if (command == "D")
-    ++new_x;
-
-  if (new_x >= 0 && new_x < map_size && new_y >= 0 && new_y < map_size) {
-    if (map[new_y][new_x] == '.') {
-      map[character.pos_y][character.pos_x] = '.';
-      character.pos_x = new_x;
-      character.pos_y = new_y;
-    } else if (character.is_hero && map[new_y][new_x] == 'E') {
-      for (auto& enemy : enemies) {
-        if (enemy.pos_x == new_x && enemy.pos_y == new_y) {
-          Attack(character, enemy);
-          break;
-        }
-      }
-    } else if (!character.is_hero && map[new_y][new_x] == 'P') {
-      Attack(character, player);
-    }
-  }
-}
-
 bool IsDead(const Character& character) { return character.health_point < 1; }
 
 bool GameOver(const Character& player, const vector<Character>& enemies) {
@@ -213,58 +255,74 @@ bool GameOver(const Character& player, const vector<Character>& enemies) {
   return true;
 }
 
-int main() {
-  srand(static_cast<unsigned int>(time(0)));
-
-  const int map_size = 20;
-  vector<vector<char>> map;
-  InitializeMap(map, map_size);
-
-  Character player;
-  CreatePlayer(map, player);
-
-  int enemies_amount = 5;
-  vector<Character> enemies(enemies_amount);
-  for (int i = 0; i < enemies_amount; ++i) {
-    CreateEnemy(map, enemies[i], i);
+void Attack(Character& attacker, Character& defender) {
+  defender.armor_point -= attacker.damage_point;
+  if (defender.armor_point < 0) {
+    defender.health_point += defender.armor_point;
+    defender.armor_point = 0;
   }
 
-  while (true) {
-    InitializeMap(map, map_size);
-    PlaceCharacter(map, player, 'P');
-    for (const auto& enemy : enemies) {
-      if (!IsDead(enemy)) {
-        PlaceCharacter(map, enemy, 'E');
-      }
-    }
-
-    PrintMap(map, map_size);
-
-    string command;
-    InputFromUser(command);
-
-    if (IsMovingCommand(command)) {
-      CharacterAction(map, player, player, enemies, command);
-    } else {
-      if (command == "SAVE") {
-        Save(player, enemies);
-      } else if (command == "LOAD") {
-        Load(player, enemies);
-        continue;
-      }
-    }
-
-    for (auto& enemy : enemies) {
-      if (!IsDead(enemy)) {
-        string command(1, "WSAD"[rand() % 4]);
-        CharacterAction(map, enemy, player, enemies, command);
-      }
-    }
-
-    if (GameOver(player, enemies)) {
-      break;
-    }
-    map.clear();
-  }
-  return 0;
+  cout << attacker.name << " attacks " << defender.name << " for "
+       << attacker.damage_point << " damage!" << endl;
 }
+
+void PlayerAction(Character& player, vector<Character>& enemies, vector<vector<char>>& map, const string& command) {
+    int map_size = map.size();
+    int new_x = player.pos_x;
+    int new_y = player.pos_y;
+
+    if (command == "W")
+        --new_y;
+    else if (command == "S")
+        ++new_y;
+    else if (command == "A")
+        --new_x;
+    else if (command == "D")
+        ++new_x;
+
+    if (new_x >= 0 && new_x < map_size && new_y >= 0 && new_y < map_size) {
+        if (map[new_y][new_x] == '.') {
+            map[player.pos_y][player.pos_x] = '.';
+            player.pos_x = new_x;
+            player.pos_y = new_y;
+        } else if (map[new_y][new_x] == 'E') {
+            for (auto& enemy :enemies) {
+                if (enemy.pos_x == new_x && enemy.pos_y == new_y) {
+                    Attack(player, enemy);
+                    if (IsDead(enemy)) {
+                        map[enemy.pos_y][enemy.pos_x] = '.';
+                        cout << enemy.name << " is dead" << endl;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+}
+
+void EnemyAction(Character& enemy, Character& player, vector<vector<char>>& map, const string& command) {
+    int map_size = map.size();
+    int new_x = enemy.pos_x;
+    int new_y = enemy.pos_y;
+
+    if (command == "W")
+        --new_y;
+    else if (command == "S")
+        ++new_y;
+    else if (command == "A")
+        --new_x;
+    else if (command == "D")
+        ++new_x;
+
+    if (new_x >= 0 && new_x < map_size && new_y >= 0 && new_y < map_size) {
+        if (map[new_y][new_x] == '.') {
+            map[enemy.pos_y][enemy.pos_x] = '.';
+            enemy.pos_x = new_x;
+            enemy.pos_y = new_y;
+        } else if (map[new_y][new_x] == 'P') {
+            Attack(enemy, player);
+        }
+    }
+}
+
+
